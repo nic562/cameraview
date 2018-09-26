@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<resources>
+    <string name="allow">allow</string>
+    <string name="deny">deny</string>
+    <string name="deny_anyway">deny anyway</string>
+    <string name="cancel">cancel</string>
+    <string name="dismiss">dismiss</string>
+</resources>

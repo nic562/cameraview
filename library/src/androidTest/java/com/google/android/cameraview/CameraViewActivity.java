@@ -16,12 +16,20 @@
 
 package com.google.android.cameraview;
 
+import android.Manifest;
 import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import android.widget.Toast;
 
 import com.google.android.cameraview.test.R;
 
 public class CameraViewActivity extends Activity {
+
+    private final static int PERMISSION_REQ_CODE_CAMERA = 100;
 
     private CameraView mCameraView;
 
@@ -29,13 +37,19 @@ public class CameraViewActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera_view);
-        mCameraView = (CameraView) findViewById(R.id.camera);
+        mCameraView = findViewById(R.id.camera);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        mCameraView.start();
+        int cameraPermissionStatus = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA);
+        if (cameraPermissionStatus == PackageManager.PERMISSION_GRANTED) {
+            mCameraView.start();
+        }else {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA},
+                    PERMISSION_REQ_CODE_CAMERA);
+        }
     }
 
     @Override
@@ -44,4 +58,21 @@ public class CameraViewActivity extends Activity {
         super.onPause();
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,@NonNull int[] grantResults) {
+        if (requestCode == PERMISSION_REQ_CODE_CAMERA) {
+            if (grantResults.length > 0){
+                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    mCameraView.start();
+                } else if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)){
+                    Toast toast = new Toast(this);
+                    toast.setText("No permission!!!");
+                    toast.setDuration(Toast.LENGTH_LONG);
+                    toast.show();
+                }
+            }
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
+    }
 }
