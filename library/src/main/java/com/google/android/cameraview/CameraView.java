@@ -29,6 +29,7 @@ import androidx.core.os.ParcelableCompat;
 import androidx.core.os.ParcelableCompatCreatorCallbacks;
 import androidx.core.view.ViewCompat;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.widget.FrameLayout;
 
 import java.lang.annotation.Retention;
@@ -78,6 +79,9 @@ public class CameraView extends FrameLayout {
 
     private final DisplayOrientationDetector mDisplayOrientationDetector;
 
+    private int cameraVersion;
+    private int previewType;
+
     public CameraView(Context context) {
         this(context, null);
     }
@@ -94,19 +98,16 @@ public class CameraView extends FrameLayout {
             mDisplayOrientationDetector = null;
             return;
         }
-        // Internal setup
-        final PreviewImpl preview = createPreviewImpl(context);
-        mCallbacks = new CallbackBridge();
-        if (Build.VERSION.SDK_INT < 21) {
-            mImpl = new Camera1(mCallbacks, preview);
-        } else if (Build.VERSION.SDK_INT < 23) {
-            mImpl = new Camera2(mCallbacks, preview, context);
-        } else {
-            mImpl = new Camera2Api23(mCallbacks, preview, context);
-        }
         // Attributes
         TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.CameraView, defStyleAttr,
                 R.style.Widget_CameraView);
+        cameraVersion = a.getInt(R.styleable.CameraView_version, 0);
+        previewType = a.getInt(R.styleable.CameraView_preview, 0);
+
+        // Internal setup
+        mCallbacks = new CallbackBridge();
+        initCamera(context);
+
         mAdjustViewBounds = a.getBoolean(R.styleable.CameraView_android_adjustViewBounds, false);
         setFacing(a.getInt(R.styleable.CameraView_facing, FACING_BACK));
         String aspectRatio = a.getString(R.styleable.CameraView_aspectRatio);
@@ -127,15 +128,44 @@ public class CameraView extends FrameLayout {
         };
     }
 
+    private void initCamera(Context context){
+        PreviewImpl preview = createPreviewImpl(context, previewType);
+        Log.i(this.getClass().getName(), "create camera preview: " + preview.getClass().getSimpleName());
+        if (cameraVersion == 1 || Build.VERSION.SDK_INT < 21) {
+            mImpl = new Camera1(mCallbacks, preview);
+        } else if (Build.VERSION.SDK_INT < 23) {
+            mImpl = new Camera2(mCallbacks, preview, context);
+        } else {
+            mImpl = new Camera2Api23(mCallbacks, preview, context);
+        }
+        Log.i(this.getClass().getName(), "using camera: " + mImpl.getClass().getSimpleName());
+    }
+
     @NonNull
-    private PreviewImpl createPreviewImpl(Context context) {
+    private PreviewImpl createPreviewImpl(Context context, int type) {
         PreviewImpl preview;
-        if (Build.VERSION.SDK_INT < 14) {
+        if (type == 1 || (type == 0 && (Build.VERSION.SDK_INT < 14 || Build.VERSION.SDK_INT > 23))) {
             preview = new SurfaceViewPreview(context, this);
         } else {
             preview = new TextureViewPreview(context, this);
         }
         return preview;
+    }
+
+    /**
+     * {@link CameraViewImpl#setHandleFrame 是否需要帧数据回调}
+     * @param b boolean
+     */
+    public void setHandleFrame(boolean b) {
+        mImpl.setHandleFrame(b);
+    }
+
+    public boolean isHandleFrame() {
+        return mImpl.handleFrame;
+    }
+
+    public int getCameraRotation() {
+        return mImpl.getCameraRotation();
     }
 
     @Override
@@ -243,14 +273,10 @@ public class CameraView extends FrameLayout {
      * {@link Activity#onResume()}.
      */
     public void start() {
-        if (!mImpl.start()) {
-            //store the state ,and restore this state after fall back o Camera1
-            Parcelable state=onSaveInstanceState();
-            // Camera2 uses legacy hardware layer; fall back to Camera1
-            mImpl = new Camera1(mCallbacks, createPreviewImpl(getContext()));
-            onRestoreInstanceState(state);
-            mImpl.start();
+        if (mImpl == null) {
+            initCamera(getContext());
         }
+        mImpl.start();
     }
 
     /**
@@ -449,6 +475,27 @@ public class CameraView extends FrameLayout {
             }
         }
 
+        @Override
+        public void onCameraFrame(byte[] data) {
+            for (Callback callback : mCallbacks) {
+                callback.onCameraFrame(CameraView.this, data);
+            }
+        }
+
+        @Override
+        public void onCameraError(int error) {
+            for (Callback callback : mCallbacks) {
+                callback.onCameraError(CameraView.this, error);
+            }
+        }
+
+        @Override
+        public void onPreviewStart(int width, int height) {
+            for (Callback callback : mCallbacks) {
+                callback.onPreviewStart(CameraView.this, width, height);
+            }
+        }
+
         public void reserveRequestLayoutOnOpen() {
             mRequestLayoutOnOpen = true;
         }
@@ -466,6 +513,9 @@ public class CameraView extends FrameLayout {
         @Flash
         int flash;
 
+        int cameraVersion;
+        int previewType;
+
         @SuppressWarnings("WrongConstant")
         public SavedState(Parcel source, ClassLoader loader) {
             super(source);
@@ -473,6 +523,8 @@ public class CameraView extends FrameLayout {
             ratio = source.readParcelable(loader);
             autoFocus = source.readByte() != 0;
             flash = source.readInt();
+            cameraVersion = source.readInt();
+            previewType = source.readInt();
         }
 
         public SavedState(Parcelable superState) {
@@ -486,6 +538,8 @@ public class CameraView extends FrameLayout {
             out.writeParcelable(ratio, 0);
             out.writeByte((byte) (autoFocus ? 1 : 0));
             out.writeInt(flash);
+            out.writeInt(cameraVersion);
+            out.writeInt(previewType);
         }
 
         public static final Parcelable.Creator<SavedState> CREATOR
@@ -534,6 +588,26 @@ public class CameraView extends FrameLayout {
          * @param data       JPEG data.
          */
         public void onPictureTaken(CameraView cameraView, byte[] data) {
+        }
+
+        /**
+         * 摄像头抓取的帧数据回调
+         * @param data 帧数据
+         */
+        public void onCameraFrame(CameraView cameraView, byte[] data) {
+        }
+
+        /**
+         * 预览开始
+         */
+        public void onPreviewStart(CameraView cameraView, int width, int height) {
+        }
+
+        /**
+         *  相机错误回调
+         * @param error 错误码
+         */
+        public void onCameraError(CameraView cameraView, int error) {
         }
     }
 

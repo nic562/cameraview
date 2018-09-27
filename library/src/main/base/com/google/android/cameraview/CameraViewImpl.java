@@ -26,6 +26,8 @@ abstract class CameraViewImpl {
 
     protected final PreviewImpl mPreview;
 
+    protected boolean handleFrame = false;
+
     CameraViewImpl(Callback callback, PreviewImpl preview) {
         mCallback = callback;
         mPreview = preview;
@@ -33,6 +35,15 @@ abstract class CameraViewImpl {
 
     View getView() {
         return mPreview.getView();
+    }
+
+    /**
+     * 设置为true 则会回调 {@link Callback#onCameraFrame}
+     * 设置后需要重启传感器方可生效
+     * @param b boolean
+     */
+    public void setHandleFrame(boolean b) {
+        handleFrame = b;
     }
 
     /**
@@ -69,6 +80,8 @@ abstract class CameraViewImpl {
 
     abstract void setDisplayOrientation(int displayOrientation);
 
+    public abstract int getCameraRotation();
+
     interface Callback {
 
         void onCameraOpened();
@@ -77,6 +90,16 @@ abstract class CameraViewImpl {
 
         void onPictureTaken(byte[] data);
 
+        void onPreviewStart(int width, int height);
+
+        /**
+         * 需要设置 {@link CameraViewImpl#setHandleFrame(boolean) true}
+         * 设置后需要重启摄像
+         * @param data 帧数据
+         */
+        void onCameraFrame(byte[] data);
+
+        void onCameraError(int error);
     }
 
 }

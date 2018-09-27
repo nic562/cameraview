@@ -54,5 +54,20 @@
             -->
             <enum name="redEye" value="4"/>
         </attr>
+
+        <!-- 相机api版本 使用兼容性的camera1,
+        在api版本大于21时方可用camera2,
+        auto: 自动选择 -->
+        <attr name="version" format="enum">
+            <enum name="auto" value="0" />
+            <enum name="camera1" value="1" />
+            <enum name="camera2" value="2" />
+        </attr>
+
+        <attr name="preview" format="enum">
+            <enum name="auto" value="0" />
+            <enum name="surface" value="1" />
+            <enum name="texture" value="2" />
+        </attr>
     </declare-styleable>
 </resources>

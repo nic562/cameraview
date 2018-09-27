@@ -64,6 +64,13 @@ public class MainActivity extends AppCompatActivity implements
 
     private static final int REQUEST_CAMERA_PERMISSION = 1;
 
+    private static final String[] permissions = new String[]{
+            Manifest.permission.CAMERA,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+    };
+
     private static final String FRAGMENT_DIALOG = "dialog";
 
     private static final int[] FLASH_OPTIONS = {
@@ -107,15 +114,15 @@ public class MainActivity extends AppCompatActivity implements
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        mCameraView = (CameraView) findViewById(R.id.camera);
+        mCameraView = findViewById(R.id.camera);
         if (mCameraView != null) {
             mCameraView.addCallback(mCallback);
         }
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.take_picture);
+        FloatingActionButton fab = findViewById(R.id.take_picture);
         if (fab != null) {
             fab.setOnClickListener(mOnClickListener);
         }
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
@@ -123,22 +130,41 @@ public class MainActivity extends AppCompatActivity implements
         }
     }
 
+
+    private boolean checkPermissions(String[] pms) {
+        for (String p: pms) {
+            if (ContextCompat.checkSelfPermission(this, p)
+                    == PackageManager.PERMISSION_DENIED) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean shouldShowRequestPermissionRationale(String[] pms) {
+        for (String p: pms) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    p)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED) {
+        if (checkPermissions(permissions)) {
             mCameraView.start();
-        } else if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                Manifest.permission.CAMERA)) {
+        } else if (shouldShowRequestPermissionRationale(permissions)) {
             ConfirmationDialogFragment
                     .newInstance(R.string.camera_permission_confirmation,
-                            new String[]{Manifest.permission.CAMERA},
+                            permissions,
                             REQUEST_CAMERA_PERMISSION,
                             R.string.camera_permission_not_granted)
                     .show(getSupportFragmentManager(), FRAGMENT_DIALOG);
         } else {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA},
+            ActivityCompat.requestPermissions(this, permissions,
                     REQUEST_CAMERA_PERMISSION);
         }
     }
@@ -167,12 +193,14 @@ public class MainActivity extends AppCompatActivity implements
             @NonNull int[] grantResults) {
         switch (requestCode) {
             case REQUEST_CAMERA_PERMISSION:
-                if (permissions.length != 1 || grantResults.length != 1) {
-                    throw new RuntimeException("Error on requesting camera permission.");
+                if (permissions.length != grantResults.length) {
+                    Toast.makeText(this, "Error on requesting camera permission.", Toast.LENGTH_LONG).show();
                 }
-                if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-                    Toast.makeText(this, R.string.camera_permission_not_granted,
-                            Toast.LENGTH_SHORT).show();
+                for (int g: grantResults) {
+                    if (g != PackageManager.PERMISSION_GRANTED) {
+                        Toast.makeText(this, R.string.camera_permission_not_granted,
+                                Toast.LENGTH_SHORT).show();
+                    }
                 }
                 // No need to start camera here; it is handled by onResume
                 break;
@@ -250,13 +278,14 @@ public class MainActivity extends AppCompatActivity implements
         @Override
         public void onPictureTaken(CameraView cameraView, final byte[] data) {
             Log.d(TAG, "onPictureTaken " + data.length);
-            Toast.makeText(cameraView.getContext(), R.string.picture_taken, Toast.LENGTH_SHORT)
+            final File file = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES),
+                    System.currentTimeMillis() + ".jpg");
+            Log.i(TAG, "taken picture saving to " + file.getAbsolutePath());
+            Toast.makeText(cameraView.getContext(), getString(R.string.picture_taken) + ":" + file.getAbsolutePath(), Toast.LENGTH_SHORT)
                     .show();
             getBackgroundHandler().post(new Runnable() {
                 @Override
                 public void run() {
-                    File file = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES),
-                            "picture.jpg");
                     OutputStream os = null;
                     try {
                         os = new FileOutputStream(file);

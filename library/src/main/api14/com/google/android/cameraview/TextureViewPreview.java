@@ -18,7 +18,9 @@ package com.google.android.cameraview;
 
 import android.annotation.TargetApi;
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.view.Surface;
 import android.view.TextureView;
@@ -34,7 +36,7 @@ class TextureViewPreview extends PreviewImpl {
 
     TextureViewPreview(Context context, ViewGroup parent) {
         final View view = View.inflate(context, R.layout.texture_view, parent);
-        mTextureView = (TextureView) view.findViewById(R.id.texture_view);
+        mTextureView = view.findViewById(R.id.texture_view);
         mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
 
             @Override
@@ -88,6 +90,26 @@ class TextureViewPreview extends PreviewImpl {
     @Override
     Class getOutputClass() {
         return SurfaceTexture.class;
+    }
+
+    @Override
+    public Canvas lockCanvas() {
+        return mTextureView.lockCanvas();
+    }
+
+    /**
+     * see {@link TextureView#lockCanvas(Rect)}
+     * @param dirty Area of the surface that will be modified
+     * @return Canvas
+     */
+    @Override
+    public Canvas lockCanvas(Rect dirty) {
+        return mTextureView.lockCanvas(dirty);
+    }
+
+    @Override
+    public void unlockCanvasAndPost(Canvas canvas) {
+        mTextureView.unlockCanvasAndPost(canvas);
     }
 
     @Override

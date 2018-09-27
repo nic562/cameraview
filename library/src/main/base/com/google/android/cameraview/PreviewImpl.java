@@ -16,6 +16,8 @@
 
 package com.google.android.cameraview;
 
+import android.graphics.Canvas;
+import android.graphics.Rect;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.View;
@@ -54,6 +56,18 @@ abstract class PreviewImpl {
         mCallback.onSurfaceChanged();
     }
 
+    public abstract Canvas lockCanvas();
+
+    /**
+     * The caller may also pass <code>null</code> instead, in the case where the
+     * entire surface should be redrawn
+     * @param dirty Area of the surface that will be modified
+     * @return Canvas
+     */
+    public abstract Canvas lockCanvas(Rect dirty);
+
+    public abstract void unlockCanvasAndPost(Canvas canvas);
+
     SurfaceHolder getSurfaceHolder() {
         return null;
     }
@@ -66,6 +80,7 @@ abstract class PreviewImpl {
     }
 
     void setSize(int width, int height) {
+        System.out.println("preview implement size: " + width + "x" + height);
         mWidth = width;
         mHeight = height;
     }

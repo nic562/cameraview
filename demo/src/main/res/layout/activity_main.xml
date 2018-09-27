@@ -21,15 +21,9 @@
     android:background="@color/primary"
     tools:context=".MainActivity">
 
-    <com.google.android.cameraview.CameraView
-        android:id="@+id/camera"
+    <include layout="@layout/layout_camera_view"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:layout_alignParentTop="true"
-        android:adjustViewBounds="true"
-        android:background="@android:color/black"/>
+        android:layout_height="wrap_content" />
 
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/toolbar"
