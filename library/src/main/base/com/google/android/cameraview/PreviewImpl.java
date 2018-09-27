@@ -26,7 +26,7 @@ import android.view.View;
 /**
  * Encapsulates all the operations related to camera preview in a backward-compatible manner.
  */
-abstract class PreviewImpl {
+public abstract class PreviewImpl {
 
     interface Callback {
         void onSurfaceChanged();
@@ -85,11 +85,11 @@ abstract class PreviewImpl {
         mHeight = height;
     }
 
-    int getWidth() {
+    public int getWidth() {
         return mWidth;
     }
 
-    int getHeight() {
+    public int getHeight() {
         return mHeight;
     }
 

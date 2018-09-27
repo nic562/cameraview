@@ -95,10 +95,10 @@ class Camera1 extends CameraViewImpl {
     @Override
     boolean start() {
         chooseCamera();
+        openCamera();
         if (mPreview.isReady()) {
             setUpPreview();
         }
-        openCamera();
         mShowingPreview = true;
         mCamera.startPreview();
         return true;
@@ -115,7 +115,7 @@ class Camera1 extends CameraViewImpl {
 
     // Suppresses Camera#setPreviewTexture
     @SuppressLint("NewApi")
-    void setUpPreview() {
+    private void setUpPreview() {
         try {
             if (mPreview.getOutputClass() == SurfaceHolder.class) {
                 final boolean needsToStopPreview = mShowingPreview && Build.VERSION.SDK_INT < 14;

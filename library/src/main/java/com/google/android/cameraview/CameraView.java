@@ -268,6 +268,10 @@ public class CameraView extends FrameLayout {
         setFlash(ss.flash);
     }
 
+    public PreviewImpl getPreview() {
+        return mImpl.mPreview;
+    }
+
     /**
      * Open a camera device and start showing camera preview. This is typically called from
      * {@link Activity#onResume()}.

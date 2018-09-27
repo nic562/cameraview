@@ -20,6 +20,13 @@ import android.Manifest;
 import android.app.Dialog;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.ImageFormat;
+import android.graphics.Matrix;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -45,6 +52,7 @@ import android.widget.Toast;
 import com.google.android.cameraview.AspectRatio;
 import com.google.android.cameraview.CameraView;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -110,13 +118,65 @@ public class MainActivity extends AppCompatActivity implements
         }
     };
 
+    private byte[] frame;
+
+    private int frameWidth;
+    private int frameHeight;
+
+    private boolean drawFramePause = false;
+    private boolean drawFrameRun = false;
+
+    private Runnable frameDrawer = new Runnable() {
+        @Override
+        public void run() {
+            drawFrameRun = true;
+            while (drawFrameRun) {
+                if(drawFramePause){
+                    continue;
+                }
+                if (frame == null) {
+                    continue;
+                }
+                Log.i(TAG, "start frame process!");
+                try {
+                    int w = frameWidth;
+                    int h = frameHeight;
+                    YuvImage img = new YuvImage(frame, ImageFormat.NV21, w, h, null);
+                    ByteArrayOutputStream os = new ByteArrayOutputStream(frame.length);
+                    if (!img.compressToJpeg(new Rect(0, 0, w, h), 100, os)){
+                        Log.w(TAG, "format frame data failed!!");
+                        continue;
+                    }
+                    byte[] tmp = os.toByteArray();
+                    Bitmap bmp = BitmapFactory.decodeByteArray(tmp, 0, tmp.length);
+                    drawFrame(bmp);
+                    bmp.recycle();
+                } catch (Exception e){
+                    Log.e(TAG, "draw frame error", e);
+                }
+                Log.i(TAG, "end frame process!");
+            }
+            Log.d(TAG, "frame process thread exit!");
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         mCameraView = findViewById(R.id.camera);
         if (mCameraView != null) {
+
+            /*
+            * ******************
+            * 设置是否单独处理每一帧图像
+            */
+//            mCameraView.setHandleFrame(true);
+
             mCameraView.addCallback(mCallback);
+
+            Thread frameProcessThread = new Thread(frameDrawer);
+            frameProcessThread.start();
         }
         FloatingActionButton fab = findViewById(R.id.take_picture);
         if (fab != null) {
@@ -154,6 +214,7 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     protected void onResume() {
         super.onResume();
+        drawFramePause = false;
         if (checkPermissions(permissions)) {
             mCameraView.start();
         } else if (shouldShowRequestPermissionRationale(permissions)) {
@@ -172,11 +233,13 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     protected void onPause() {
         mCameraView.stop();
+        drawFramePause = true;
         super.onPause();
     }
 
     @Override
     protected void onDestroy() {
+        drawFrameRun = false;
         super.onDestroy();
         if (mBackgroundHandler != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
@@ -262,6 +325,34 @@ public class MainActivity extends AppCompatActivity implements
         return mBackgroundHandler;
     }
 
+    private void drawFrame(Bitmap bmp) {
+        if (bmp == null || bmp.isRecycled()) {
+            return;
+        }
+
+        Log.i(TAG,"start drawFrame");
+        Canvas canvas = mCameraView.getPreview().lockCanvas();
+        Matrix matrix = new Matrix();
+        if (mCameraView.getCameraRotation() == 0){
+            matrix.postScale(canvas.getWidth()*1f / bmp.getWidth(), canvas.getHeight()*1f / bmp.getHeight());
+        } else {
+            matrix.postScale(canvas.getWidth()*1f / bmp.getHeight(), canvas.getHeight()*1f / bmp.getWidth());
+            matrix.postRotate(mCameraView.getCameraRotation());
+        }
+        Bitmap newBmp = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), matrix, true);
+
+        Log.i(TAG, "canvas["+ canvas.getWidth() + "x" + canvas.getHeight() + "] draw frame bitmap size: " +
+                bmp.getWidth() + "x" + bmp.getHeight() + " ==> " +
+                newBmp.getWidth() + "x" + newBmp.getHeight());
+        canvas.drawBitmap(newBmp,
+                (canvas.getWidth() - mCameraView.getPreview().getWidth()) * 1f / 2,
+                (canvas.getHeight() - mCameraView.getPreview().getHeight()) * 1f / 2,
+                null
+        );
+        mCameraView.getPreview().unlockCanvasAndPost(canvas);
+        Log.i(TAG,"end drawFrame");
+    }
+
     private CameraView.Callback mCallback
             = new CameraView.Callback() {
 
@@ -273,6 +364,24 @@ public class MainActivity extends AppCompatActivity implements
         @Override
         public void onCameraClosed(CameraView cameraView) {
             Log.d(TAG, "onCameraClosed");
+        }
+
+        @Override
+        public void onCameraFrame(CameraView cameraView, byte[] data) {
+            Log.d(TAG, "on frame size: " + data.length);
+            frame = data;
+        }
+
+        @Override
+        public void onPreviewStart(CameraView cameraView, int width, int height) {
+            Log.d(TAG, "on preview start: " + width + "x" + height);
+            frameWidth = width;
+            frameHeight = height;
+        }
+
+        @Override
+        public void onCameraError(CameraView cameraView, int error) {
+            Log.e(TAG, "camera error: "+ error);
         }
 
         @Override

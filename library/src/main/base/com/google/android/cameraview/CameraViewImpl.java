@@ -90,6 +90,11 @@ abstract class CameraViewImpl {
 
         void onPictureTaken(byte[] data);
 
+        /**
+         * 传感器开始工作，回调所使用的图像尺寸
+         * @param width 宽度
+         * @param height 高度
+         */
         void onPreviewStart(int width, int height);
 
         /**
