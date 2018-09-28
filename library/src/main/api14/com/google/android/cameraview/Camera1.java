@@ -60,6 +60,8 @@ class Camera1 extends CameraViewImpl {
 
     private final SizeMap mPictureSizes = new SizeMap();
 
+    private Size optimalCameraPreviewSize;
+
     private AspectRatio mAspectRatio;
 
     private boolean mShowingPreview;
@@ -347,7 +349,7 @@ class Camera1 extends CameraViewImpl {
                 public void onPreviewFrame(byte[] data, Camera camera) {
                     System.arraycopy(data, 0, frame, 0, data.length);
                     camera.addCallbackBuffer(buffer);
-                    mCallback.onCameraFrame(frame);
+                    mCallback.onCameraFrame(frame, optimalCameraPreviewSize.getWidth(), optimalCameraPreviewSize.getHeight());
                 }
             });
         }
@@ -386,6 +388,7 @@ class Camera1 extends CameraViewImpl {
         frame = new byte[bfSize];
         mCamera.addCallbackBuffer(buffer);
 
+        optimalCameraPreviewSize = size;
         mCameraParameters.setPreviewSize(size.getWidth(), size.getHeight());
         mCameraParameters.setPictureSize(pictureSize.getWidth(), pictureSize.getHeight());
         cameraRotation = calcCameraRotation(mDisplayOrientation);

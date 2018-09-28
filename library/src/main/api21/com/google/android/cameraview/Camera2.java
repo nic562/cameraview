@@ -19,6 +19,7 @@ package com.google.android.cameraview;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.graphics.ImageFormat;
+import android.graphics.Rect;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -64,6 +65,9 @@ class Camera2 extends CameraViewImpl {
      * Max preview height that is guaranteed by Camera2 API
      */
     private static final int MAX_PREVIEW_HEIGHT = 1080;
+
+    private static final int COLOR_FORMAT_I420 = 1;
+    private static final int COLOR_FORMAT_NV21 = 2;
 
     private final CameraManager mCameraManager;
 
@@ -119,6 +123,7 @@ class Camera2 extends CameraViewImpl {
             } catch (IllegalStateException e) {
                 Log.e(TAG, "Failed to start camera preview.", e);
             }
+
             mCallback.onPreviewStart(mPreview.getWidth(), mPreview.getHeight());
         }
 
@@ -189,14 +194,8 @@ class Camera2 extends CameraViewImpl {
                 if (image == null) {
                     return;
                 }
-
-                Image.Plane[] planes = image.getPlanes();
-                if (planes.length > 0) {
-                    ByteBuffer buffer = planes[0].getBuffer();
-                    byte[] data = new byte[buffer.remaining()];
-                    buffer.get(data);
-                    mCallback.onCameraFrame(data);
-                }
+                byte[] data = getDataFromImage(image, COLOR_FORMAT_NV21);
+                mCallback.onCameraFrame(data, image.getWidth(), image.getHeight());
             }
         }
 
@@ -207,11 +206,11 @@ class Camera2 extends CameraViewImpl {
 
     private CameraCharacteristics mCameraCharacteristics;
 
-    CameraDevice mCamera;
+    private CameraDevice mCamera;
 
-    CameraCaptureSession mCaptureSession;
+    private CameraCaptureSession mCaptureSession;
 
-    CaptureRequest.Builder mPreviewRequestBuilder;
+    private CaptureRequest.Builder mPreviewRequestBuilder;
 
     private ImageReader fileImageReader; // 用户处理摄像头抓捕的保存图片文件用的帧数据
     private ImageReader previewImageReader; // 用于处理摄像头抓捕的显示用的帧数据
@@ -228,7 +227,7 @@ class Camera2 extends CameraViewImpl {
 
     private int mFlash;
 
-    private int mDisplayOrientation;
+    private int cameraRotation;
 
     Camera2(Callback callback, PreviewImpl preview, Context context) {
         super(callback, preview);
@@ -381,13 +380,106 @@ class Camera2 extends CameraViewImpl {
 
     @Override
     void setDisplayOrientation(int displayOrientation) {
-        mDisplayOrientation = displayOrientation;
-        mPreview.setDisplayOrientation(mDisplayOrientation);
+        @SuppressWarnings("ConstantConditions")
+        int sensorOrientation = mCameraCharacteristics.get(
+                CameraCharacteristics.SENSOR_ORIENTATION);
+        cameraRotation = (sensorOrientation +
+                displayOrientation * (mFacing == Constants.FACING_FRONT ? 1 : -1) +
+                360) % 360;
+        mPreview.setDisplayOrientation(displayOrientation);
     }
 
     @Override
     public int getCameraRotation() {
-        return mDisplayOrientation;
+        return cameraRotation;
+    }
+
+    private static boolean isImageFormatSupported(Image image) {
+        int format = image.getFormat();
+        switch (format) {
+            case ImageFormat.YUV_420_888:
+            case ImageFormat.NV21:
+            case ImageFormat.YV12:
+                return true;
+        }
+        return false;
+    }
+
+    private byte[] getDataFromImage(Image image, int colorFormat) {
+        if (colorFormat != COLOR_FORMAT_I420 && colorFormat != COLOR_FORMAT_NV21) {
+            throw new IllegalArgumentException("only support COLOR_FORMAT_I420 " + "and COLOR_FORMAT_NV21");
+        }
+        if (!isImageFormatSupported(image)){
+            throw new RuntimeException("image format do not support:" + image.getFormat());
+        }
+        Rect crop = image.getCropRect();
+        int format = image.getFormat();
+        int width = crop.width();
+        int height = crop.height();
+        Image.Plane[] planes = image.getPlanes();
+        byte[] data = new byte[width * height * ImageFormat.getBitsPerPixel(format) / 8];
+        byte[] rowData = new byte[planes[0].getRowStride()];
+        Log.d(TAG, "get data from " + planes.length + " planes");
+        int channelOffset = 0;
+        int outputStride = 1;
+        for (int i = 0; i < planes.length; i++) {
+            switch (i) {
+                case 0:
+                    channelOffset = 0;
+                    outputStride = 1;
+                    break;
+                case 1:
+                    if (colorFormat == COLOR_FORMAT_I420) {
+                        channelOffset = width * height;
+                        outputStride = 1;
+                    } else {
+                        channelOffset = width * height + 1;
+                        outputStride = 2;
+                    }
+                    break;
+                case 2:
+                    if (colorFormat == COLOR_FORMAT_I420) {
+                        channelOffset = (int) (width * height * 1.25);
+                        outputStride = 1;
+                    } else {
+                        channelOffset = width * height;
+                        outputStride = 2;
+                    }
+                    break;
+            }
+            ByteBuffer buffer = planes[i].getBuffer();
+            int rowStride = planes[i].getRowStride();
+            int pixelStride = planes[i].getPixelStride();
+            Log.v(TAG, "pixelStride " + pixelStride);
+            Log.v(TAG, "rowStride " + rowStride);
+            Log.v(TAG, "width " + width);
+            Log.v(TAG, "height " + height);
+            Log.v(TAG, "buffer size " + buffer.remaining());
+            int shift = (i == 0) ? 0 : 1;
+            int w = width >> shift;
+            int h = height >> shift;
+            buffer.position(rowStride * (crop.top >> shift) + pixelStride * (crop.left >> shift));
+            for (int row = 0; row < h; row++) {
+                int length;
+                if (pixelStride == 1 && outputStride == 1) {
+                    length = w;
+                    buffer.get(data, channelOffset, length);
+                    channelOffset += length;
+                } else {
+                    length = (w - 1) * pixelStride + 1;
+                    buffer.get(rowData, 0, length);
+                    for (int col = 0; col < w; col++) {
+                        data[channelOffset] = rowData[col * pixelStride];
+                        channelOffset += outputStride;
+                    }
+                }
+                if (row < h - 1) {
+                    buffer.position(buffer.position() + rowStride - length);
+                }
+            }
+            Log.d(TAG, "Finished reading data from plane " + i);
+        }
+        return data;
     }
 
     /**
@@ -521,8 +613,6 @@ class Camera2 extends CameraViewImpl {
         if (!isCameraOpened() || !mPreview.isReady()) {
             return;
         }
-        Size previewSize = chooseOptimalSize();
-        mPreview.setBufferSize(previewSize.getWidth(), previewSize.getHeight());
         try {
             mPreviewRequestBuilder = mCamera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             List<Surface> surfaces = new ArrayList<>();
@@ -539,6 +629,8 @@ class Camera2 extends CameraViewImpl {
                     mPreviewRequestBuilder.addTarget(previewImageReader.getSurface());
                 }
             } else {
+                Size previewSize = chooseOptimalSize();
+                mPreview.setBufferSize(previewSize.getWidth(), previewSize.getHeight());
                 surfaces.add(mPreview.getSurface());
                 mPreviewRequestBuilder.addTarget(mPreview.getSurface());
             }
@@ -690,13 +782,7 @@ class Camera2 extends CameraViewImpl {
                     break;
             }
             // Calculate JPEG orientation.
-            @SuppressWarnings("ConstantConditions")
-            int sensorOrientation = mCameraCharacteristics.get(
-                    CameraCharacteristics.SENSOR_ORIENTATION);
-            captureRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION,
-                    (sensorOrientation +
-                            mDisplayOrientation * (mFacing == Constants.FACING_FRONT ? 1 : -1) +
-                            360) % 360);
+            captureRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, cameraRotation);
             // Stop preview and capture a still picture.
             mCaptureSession.stopRepeating();
             mCaptureSession.capture(captureRequestBuilder.build(),

@@ -480,9 +480,9 @@ public class CameraView extends FrameLayout {
         }
 
         @Override
-        public void onCameraFrame(byte[] data) {
+        public void onCameraFrame(byte[] data, int width, int height) {
             for (Callback callback : mCallbacks) {
-                callback.onCameraFrame(CameraView.this, data);
+                callback.onCameraFrame(CameraView.this, data, width, height);
             }
         }
 
@@ -598,7 +598,7 @@ public class CameraView extends FrameLayout {
          * 摄像头抓取的帧数据回调
          * @param data 帧数据
          */
-        public void onCameraFrame(CameraView cameraView, byte[] data) {
+        public void onCameraFrame(CameraView cameraView, byte[] data, int width, int height) {
         }
 
         /**

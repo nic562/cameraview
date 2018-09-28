@@ -102,7 +102,7 @@ abstract class CameraViewImpl {
          * 设置后需要重启摄像
          * @param data 帧数据
          */
-        void onCameraFrame(byte[] data);
+        void onCameraFrame(byte[] data, int width, int height);
 
         void onCameraError(int error);
     }

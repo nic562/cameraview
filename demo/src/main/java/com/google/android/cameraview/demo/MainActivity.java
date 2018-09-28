@@ -138,6 +138,7 @@ public class MainActivity extends AppCompatActivity implements
                     continue;
                 }
                 Log.i(TAG, "start frame process!");
+                //// 以下部分逻辑效率很低，时间消耗很高
                 try {
                     int w = frameWidth;
                     int h = frameHeight;
@@ -171,7 +172,7 @@ public class MainActivity extends AppCompatActivity implements
             * ******************
             * 设置是否单独处理每一帧图像
             */
-//            mCameraView.setHandleFrame(true);
+            mCameraView.setHandleFrame(true);
 
             mCameraView.addCallback(mCallback);
 
@@ -330,7 +331,7 @@ public class MainActivity extends AppCompatActivity implements
             return;
         }
 
-        Log.i(TAG,"start drawFrame");
+        Log.i(TAG,"start drawFrame on rotation:" + mCameraView.getCameraRotation());
         Canvas canvas = mCameraView.getPreview().lockCanvas();
         Matrix matrix = new Matrix();
         if (mCameraView.getCameraRotation() == 0){
@@ -367,9 +368,11 @@ public class MainActivity extends AppCompatActivity implements
         }
 
         @Override
-        public void onCameraFrame(CameraView cameraView, byte[] data) {
-            Log.d(TAG, "on frame size: " + data.length);
+        public void onCameraFrame(CameraView cameraView, byte[] data, int width, int height) {
+            Log.d(TAG, "on frame data: " + data.length + "[" + width + "x" + height + "]");
             frame = data;
+            frameWidth = width;
+            frameHeight = height;
         }
 
         @Override

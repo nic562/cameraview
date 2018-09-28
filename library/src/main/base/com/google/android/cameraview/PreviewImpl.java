@@ -80,7 +80,6 @@ public abstract class PreviewImpl {
     }
 
     void setSize(int width, int height) {
-        System.out.println("preview implement size: " + width + "x" + height);
         mWidth = width;
         mHeight = height;
     }
