@@ -23,8 +23,11 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.os.Build;
@@ -350,8 +353,26 @@ public class MainActivity extends AppCompatActivity implements
                 (canvas.getHeight() - mCameraView.getPreview().getHeight()) * 1f / 2,
                 null
         );
+        drawSomethingOnCanvas(canvas);
         mCameraView.getPreview().unlockCanvasAndPost(canvas);
         Log.i(TAG,"end drawFrame");
+    }
+
+    private void drawSomethingOnCanvas(Canvas canvas) {
+        Paint paint = new Paint();
+        paint.setColor(Color.YELLOW);
+        paint.setAlpha(100);
+        paint.setTextSize(60);
+        Path path = new Path();
+        path.moveTo(400, 200);
+        path.lineTo(550, 260);
+        path.lineTo(700, 380);
+        path.lineTo(780, 460);
+        path.lineTo(880, 520);
+        path.lineTo(680, 600);
+        path.lineTo(500, 660);
+        path.lineTo(600, 800);
+        canvas.drawTextOnPath("Hello World", path, 100, 50, paint);
     }
 
     private CameraView.Callback mCallback
@@ -398,11 +419,29 @@ public class MainActivity extends AppCompatActivity implements
             getBackgroundHandler().post(new Runnable() {
                 @Override
                 public void run() {
+
+                    // drawing something for result image
+                    Bitmap bmp = BitmapFactory.decodeByteArray(data, 0, data.length)
+                            .copy(Bitmap.Config.ARGB_8888, true);
+                    if (mCameraView.getCameraRotation() != 0) {
+                        Matrix matrix = new Matrix();
+                        matrix.postRotate(mCameraView.getCameraRotation());
+                        Bitmap newBmp = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), matrix, true);
+                        bmp.recycle();
+                        bmp = newBmp;
+                    }
+                    Canvas canvas = new Canvas(bmp);
+                    drawSomethingOnCanvas(canvas);
+                    // draw end!
+
                     OutputStream os = null;
                     try {
                         os = new FileOutputStream(file);
-                        os.write(data);
-                        os.close();
+
+                        bmp.compress(Bitmap.CompressFormat.JPEG, 100, os);
+                        bmp.recycle();
+
+//                        os.write(data);
                     } catch (IOException e) {
                         Log.w(TAG, "Cannot write to " + file, e);
                     } finally {

@@ -10,5 +10,5 @@
     android:layout_alignParentTop="true"
     android:adjustViewBounds="true"
     android:background="@android:color/black"
-    app:version="camera2"
-    app:preview="texture" />
+    app:version="auto"
+    app:preview="auto" />
