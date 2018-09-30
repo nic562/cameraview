@@ -15,12 +15,12 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    compileSdkVersion CompileSdkVersion
 
     defaultConfig {
         applicationId 'com.google.android.cameraview.demo'
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        minSdkVersion MinSdkVersion
+        targetSdkVersion TargetSdkVersion
         versionCode 1
         versionName '1.0'
         vectorDrawables.useSupportLibrary = true

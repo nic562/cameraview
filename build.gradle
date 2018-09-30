@@ -1,6 +1,10 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
+    ext.CompileSdkVersion = 28
+    ext.MinSdkVersion = 18
+    ext.TargetSdkVersion = 28
+
     repositories {
         google()
         jcenter() { url 'http://jcenter.bintray.com/'}
@@ -22,10 +26,4 @@ allprojects {
 
 task clean(type: Delete) {
     delete rootProject.buildDir
-}
-
-ext {
-    compileSdkVersion = 28
-    minSdkVersion = 18
-    targetSdkVersion = 28
 }
