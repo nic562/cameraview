@@ -124,7 +124,7 @@ class Camera2 extends CameraViewImpl {
                 Log.e(TAG, "Failed to start camera preview.", e);
             }
 
-            mCallback.onPreviewStart(mPreview.getWidth(), mPreview.getHeight());
+            mCallback.onPreviewStart(optimalPreviewSize.getWidth(), optimalPreviewSize.getHeight());
         }
 
         @Override
@@ -218,6 +218,8 @@ class Camera2 extends CameraViewImpl {
     private final SizeMap mPreviewSizes = new SizeMap();
 
     private final SizeMap mPictureSizes = new SizeMap();
+
+    private Size optimalPreviewSize;
 
     private int mFacing;
 
@@ -583,6 +585,7 @@ class Camera2 extends CameraViewImpl {
             fileImageReader.close();
         }
         Size largest = mPictureSizes.sizes(mAspectRatio).last();
+        optimalPreviewSize = largest;
         previewImageReader = ImageReader.newInstance(largest.getWidth(), largest.getHeight(),
                 ImageFormat.YUV_420_888, /* maxImages */ 2);
         previewImageReader.setOnImageAvailableListener(onPreviewImageAvailableListener, null);
@@ -630,6 +633,7 @@ class Camera2 extends CameraViewImpl {
                 }
             } else {
                 Size previewSize = chooseOptimalSize();
+                optimalPreviewSize = previewSize;
                 mPreview.setBufferSize(previewSize.getWidth(), previewSize.getHeight());
                 surfaces.add(mPreview.getSurface());
                 mPreviewRequestBuilder.addTarget(mPreview.getSurface());

@@ -347,6 +347,9 @@ class Camera1 extends CameraViewImpl {
             mCamera.setPreviewCallbackWithBuffer(new Camera.PreviewCallback() {
                 @Override
                 public void onPreviewFrame(byte[] data, Camera camera) {
+                    if (data == null){
+                        return;
+                    }
                     System.arraycopy(data, 0, frame, 0, data.length);
                     camera.addCallbackBuffer(buffer);
                     mCallback.onCameraFrame(frame, optimalCameraPreviewSize.getWidth(), optimalCameraPreviewSize.getHeight());

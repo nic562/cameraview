@@ -337,8 +337,11 @@ public class MainActivity extends AppCompatActivity implements
         Log.i(TAG,"start drawFrame on rotation:" + mCameraView.getCameraRotation());
         Canvas canvas = mCameraView.getPreview().lockCanvas();
         Matrix matrix = new Matrix();
-        if (mCameraView.getCameraRotation() == 0){
+        if (mCameraView.getCameraRotation() == 0 || mCameraView.getCameraRotation() == 180){
             matrix.postScale(canvas.getWidth()*1f / bmp.getWidth(), canvas.getHeight()*1f / bmp.getHeight());
+            if (mCameraView.getCameraRotation() == 180){
+                matrix.postRotate(mCameraView.getCameraRotation());
+            }
         } else {
             matrix.postScale(canvas.getWidth()*1f / bmp.getHeight(), canvas.getHeight()*1f / bmp.getWidth());
             matrix.postRotate(mCameraView.getCameraRotation());
@@ -391,6 +394,9 @@ public class MainActivity extends AppCompatActivity implements
         @Override
         public void onCameraFrame(CameraView cameraView, byte[] data, int width, int height) {
             Log.d(TAG, "on frame data: " + data.length + "[" + width + "x" + height + "]");
+            if (data.length == 0){
+                return;
+            }
             frame = data;
             frameWidth = width;
             frameHeight = height;
@@ -409,7 +415,7 @@ public class MainActivity extends AppCompatActivity implements
         }
 
         @Override
-        public void onPictureTaken(CameraView cameraView, final byte[] data) {
+        public void onPictureTaken(final CameraView cameraView, final byte[] data) {
             Log.d(TAG, "onPictureTaken " + data.length);
             final File file = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES),
                     System.currentTimeMillis() + ".jpg");
@@ -420,28 +426,30 @@ public class MainActivity extends AppCompatActivity implements
                 @Override
                 public void run() {
 
-                    // drawing something for result image
-                    Bitmap bmp = BitmapFactory.decodeByteArray(data, 0, data.length)
-                            .copy(Bitmap.Config.ARGB_8888, true);
-                    if (mCameraView.getCameraRotation() != 0) {
-                        Matrix matrix = new Matrix();
-                        matrix.postRotate(mCameraView.getCameraRotation());
-                        Bitmap newBmp = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), matrix, true);
-                        bmp.recycle();
-                        bmp = newBmp;
-                    }
-                    Canvas canvas = new Canvas(bmp);
-                    drawSomethingOnCanvas(canvas);
-                    // draw end!
-
                     OutputStream os = null;
                     try {
                         os = new FileOutputStream(file);
 
-                        bmp.compress(Bitmap.CompressFormat.JPEG, 100, os);
-                        bmp.recycle();
+                        if(cameraView.isHandleFrame()) {
+                            // drawing something for result image
+                            Bitmap bmp = BitmapFactory.decodeByteArray(data, 0, data.length)
+                                    .copy(Bitmap.Config.ARGB_8888, true);
+                            if (mCameraView.getCameraRotation() != 0) {
+                                Matrix matrix = new Matrix();
+                                matrix.postRotate(mCameraView.getCameraRotation());
+                                Bitmap newBmp = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), matrix, true);
+                                bmp.recycle();
+                                bmp = newBmp;
+                            }
+                            Canvas canvas = new Canvas(bmp);
+                            drawSomethingOnCanvas(canvas);
+                            // draw end!
+                            bmp.compress(Bitmap.CompressFormat.JPEG, 100, os);
+                            bmp.recycle();
+                        } else {
+                            os.write(data);
+                        }
 
-//                        os.write(data);
                     } catch (IOException e) {
                         Log.w(TAG, "Cannot write to " + file, e);
                     } finally {
