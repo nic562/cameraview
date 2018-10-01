@@ -100,9 +100,9 @@ abstract class CameraViewImpl {
         /**
          * 需要设置 {@link CameraViewImpl#setHandleFrame(boolean) true}
          * 设置后需要重启摄像
-         * @param data 帧数据
+         * @param frame 帧数据
          */
-        void onCameraFrame(byte[] data, int width, int height);
+        void onCameraFrame(Frame frame);
 
         void onCameraError(int error);
     }

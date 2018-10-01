@@ -35,17 +35,6 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
-import androidx.annotation.NonNull;
-import androidx.annotation.StringRes;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import androidx.core.app.ActivityCompat;
-import androidx.fragment.app.DialogFragment;
-import androidx.fragment.app.FragmentManager;
-import androidx.core.content.ContextCompat;
-import androidx.appcompat.app.ActionBar;
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -54,6 +43,8 @@ import android.widget.Toast;
 
 import com.google.android.cameraview.AspectRatio;
 import com.google.android.cameraview.CameraView;
+import com.google.android.cameraview.Frame;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -62,10 +53,21 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Set;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
+import androidx.appcompat.app.ActionBar;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.FragmentManager;
+
 
 /**
  * This demo app saves the taken picture to a constant file.
- * $ adb pull /sdcard/Android/data/com.google.android.cameraview.demo/files/Pictures/picture.jpg
+ * $ adb pull /sdcard/Android/data/com.google.android.cameraview.demo/files/Pictures/{currentTimeMillis}.jpg
  */
 public class MainActivity extends AppCompatActivity implements
         ActivityCompat.OnRequestPermissionsResultCallback,
@@ -121,48 +123,10 @@ public class MainActivity extends AppCompatActivity implements
         }
     };
 
-    private byte[] frame;
+    private FrameProcessThreadPool frameThreadPool;
+    private FrameQueue frameQueue;
 
-    private int frameWidth;
-    private int frameHeight;
-
-    private boolean drawFramePause = false;
-    private boolean drawFrameRun = false;
-
-    private Runnable frameDrawer = new Runnable() {
-        @Override
-        public void run() {
-            drawFrameRun = true;
-            while (drawFrameRun) {
-                if(drawFramePause){
-                    continue;
-                }
-                if (frame == null) {
-                    continue;
-                }
-                Log.i(TAG, "start frame process!");
-                //// 以下部分逻辑效率很低，时间消耗很高
-                try {
-                    int w = frameWidth;
-                    int h = frameHeight;
-                    YuvImage img = new YuvImage(frame, ImageFormat.NV21, w, h, null);
-                    ByteArrayOutputStream os = new ByteArrayOutputStream(frame.length);
-                    if (!img.compressToJpeg(new Rect(0, 0, w, h), 100, os)){
-                        Log.w(TAG, "format frame data failed!!");
-                        continue;
-                    }
-                    byte[] tmp = os.toByteArray();
-                    Bitmap bmp = BitmapFactory.decodeByteArray(tmp, 0, tmp.length);
-                    drawFrame(bmp);
-                    bmp.recycle();
-                } catch (Exception e){
-                    Log.e(TAG, "draw frame error", e);
-                }
-                Log.i(TAG, "end frame process!");
-            }
-            Log.d(TAG, "frame process thread exit!");
-        }
-    };
+    private final Object drawFrameLock = new Object();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -179,8 +143,11 @@ public class MainActivity extends AppCompatActivity implements
 
             mCameraView.addCallback(mCallback);
 
-            Thread frameProcessThread = new Thread(frameDrawer);
-            frameProcessThread.start();
+            if (mCameraView.isHandleFrame()){
+                frameQueue = new FrameQueue(6);
+                frameThreadPool = new FrameProcessThreadPool(3, new FrameProcesser(frameQueue));
+                frameThreadPool.start();
+            }
         }
         FloatingActionButton fab = findViewById(R.id.take_picture);
         if (fab != null) {
@@ -218,9 +185,11 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     protected void onResume() {
         super.onResume();
-        drawFramePause = false;
+
         if (checkPermissions(permissions)) {
             mCameraView.start();
+            if(frameThreadPool != null)
+                frameThreadPool.resume();
         } else if (shouldShowRequestPermissionRationale(permissions)) {
             ConfirmationDialogFragment
                     .newInstance(R.string.camera_permission_confirmation,
@@ -237,13 +206,15 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     protected void onPause() {
         mCameraView.stop();
-        drawFramePause = true;
+        if(frameThreadPool != null)
+            frameThreadPool.pause();
         super.onPause();
     }
 
     @Override
     protected void onDestroy() {
-        drawFrameRun = false;
+        if(frameThreadPool != null)
+            frameThreadPool.stop();
         super.onDestroy();
         if (mBackgroundHandler != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
@@ -334,31 +305,37 @@ public class MainActivity extends AppCompatActivity implements
             return;
         }
 
-        Log.i(TAG,"start drawFrame on rotation:" + mCameraView.getCameraRotation());
-        Canvas canvas = mCameraView.getPreview().lockCanvas();
+        String tag = Thread.currentThread().getName();
+
+        Log.i(tag,"start drawFrame on rotation:" + mCameraView.getCameraRotation());
+        float width = mCameraView.getPreview().getWidth()*1f;
+        float height = mCameraView.getPreview().getHeight()*1f;
+
         Matrix matrix = new Matrix();
         if (mCameraView.getCameraRotation() == 0 || mCameraView.getCameraRotation() == 180){
-            matrix.postScale(canvas.getWidth()*1f / bmp.getWidth(), canvas.getHeight()*1f / bmp.getHeight());
+            matrix.postScale(width / bmp.getWidth(), height / bmp.getHeight());
             if (mCameraView.getCameraRotation() == 180){
                 matrix.postRotate(mCameraView.getCameraRotation());
             }
         } else {
-            matrix.postScale(canvas.getWidth()*1f / bmp.getHeight(), canvas.getHeight()*1f / bmp.getWidth());
+            matrix.postScale(width / bmp.getHeight(), height / bmp.getWidth());
             matrix.postRotate(mCameraView.getCameraRotation());
         }
         Bitmap newBmp = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), matrix, true);
 
-        Log.i(TAG, "canvas["+ canvas.getWidth() + "x" + canvas.getHeight() + "] draw frame bitmap size: " +
+        Log.i(tag, "canvas["+ width + "x" + height + "] draw frame bitmap size: " +
                 bmp.getWidth() + "x" + bmp.getHeight() + " ==> " +
                 newBmp.getWidth() + "x" + newBmp.getHeight());
-        canvas.drawBitmap(newBmp,
-                (canvas.getWidth() - mCameraView.getPreview().getWidth()) * 1f / 2,
-                (canvas.getHeight() - mCameraView.getPreview().getHeight()) * 1f / 2,
-                null
-        );
-        drawSomethingOnCanvas(canvas);
-        mCameraView.getPreview().unlockCanvasAndPost(canvas);
-        Log.i(TAG,"end drawFrame");
+
+        synchronized (drawFrameLock) {
+            Canvas canvas = mCameraView.getPreview().lockCanvas();
+            if (canvas != null){
+                canvas.drawBitmap(newBmp, 0, 0, null);
+                drawSomethingOnCanvas(canvas);
+                mCameraView.getPreview().unlockCanvasAndPost(canvas);
+            }
+        }
+        Log.i(tag,"end drawFrame");
     }
 
     private void drawSomethingOnCanvas(Canvas canvas) {
@@ -378,6 +355,28 @@ public class MainActivity extends AppCompatActivity implements
         canvas.drawTextOnPath("Hello World", path, 100, 50, paint);
     }
 
+    private class FrameProcesser extends FrameProcessRunnable {
+        FrameProcesser(FrameQueue queue){
+            super(queue);
+        }
+
+        @Override
+        void processFrame(Frame frame) {
+            int w = frame.width;
+            int h = frame.height;
+            YuvImage img = new YuvImage(frame.data, ImageFormat.NV21, w, h, null);
+            ByteArrayOutputStream os = new ByteArrayOutputStream(frame.data.length);
+            if (!img.compressToJpeg(new Rect(0, 0, w, h), 100, os)){
+                Log.w(Thread.currentThread().getName(), "format frame data failed!!");
+                return;
+            }
+            byte[] tmp = os.toByteArray();
+            Bitmap bmp = BitmapFactory.decodeByteArray(tmp, 0, tmp.length);
+            drawFrame(bmp);
+            bmp.recycle();
+        }
+    }
+
     private CameraView.Callback mCallback
             = new CameraView.Callback() {
 
@@ -392,21 +391,17 @@ public class MainActivity extends AppCompatActivity implements
         }
 
         @Override
-        public void onCameraFrame(CameraView cameraView, byte[] data, int width, int height) {
-            Log.d(TAG, "on frame data: " + data.length + "[" + width + "x" + height + "]");
-            if (data.length == 0){
+        public void onCameraFrame(CameraView cameraView, Frame frame) {
+            Log.d(TAG, "on frame data: " + frame.data.length + "[" + frame.width + "x" + frame.height + "]");
+            if (frame.data.length == 0){
                 return;
             }
-            frame = data;
-            frameWidth = width;
-            frameHeight = height;
+            frameQueue.add(frame);
         }
 
         @Override
         public void onPreviewStart(CameraView cameraView, int width, int height) {
             Log.d(TAG, "on preview start: " + width + "x" + height);
-            frameWidth = width;
-            frameHeight = height;
         }
 
         @Override

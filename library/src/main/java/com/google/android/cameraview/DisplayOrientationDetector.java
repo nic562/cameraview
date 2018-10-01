@@ -40,7 +40,7 @@ abstract class DisplayOrientationDetector {
         DISPLAY_ORIENTATIONS.put(Surface.ROTATION_270, 270);
     }
 
-    Display mDisplay;
+    private Display mDisplay;
 
     private int mLastKnownDisplayOrientation = 0;
 
