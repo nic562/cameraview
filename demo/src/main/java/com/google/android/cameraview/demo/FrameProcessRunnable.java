@@ -32,8 +32,8 @@ public abstract class FrameProcessRunnable implements Runnable{
 
     @Override
     public void run() {
+        String tag = Thread.currentThread().getName();
         while (running) {
-            String tag = Thread.currentThread().getName();
             if (pause) {
                 try {
                     Thread.sleep(100);

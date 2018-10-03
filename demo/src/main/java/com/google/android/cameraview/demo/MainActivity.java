@@ -125,8 +125,8 @@ public class MainActivity extends AppCompatActivity implements
 
     private FrameProcessThreadPool frameThreadPool;
     private FrameQueue frameQueue;
-
-    private final Object drawFrameLock = new Object();
+    private FrameImageQueue frameImageQueue;
+    private FrameDrawer frameDrawer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -145,8 +145,12 @@ public class MainActivity extends AppCompatActivity implements
 
             if (mCameraView.isHandleFrame()){
                 frameQueue = new FrameQueue(6);
+                frameImageQueue = new FrameImageQueue(10);
                 frameThreadPool = new FrameProcessThreadPool(3, new FrameProcesser(frameQueue));
                 frameThreadPool.start();
+
+                frameDrawer = new FrameDrawer(frameImageQueue);
+                new Thread(frameDrawer, "frameDrawerThread").start();
             }
         }
         FloatingActionButton fab = findViewById(R.id.take_picture);
@@ -190,6 +194,8 @@ public class MainActivity extends AppCompatActivity implements
             mCameraView.start();
             if(frameThreadPool != null)
                 frameThreadPool.resume();
+            if (frameDrawer != null)
+                frameDrawer.resume();
         } else if (shouldShowRequestPermissionRationale(permissions)) {
             ConfirmationDialogFragment
                     .newInstance(R.string.camera_permission_confirmation,
@@ -208,6 +214,8 @@ public class MainActivity extends AppCompatActivity implements
         mCameraView.stop();
         if(frameThreadPool != null)
             frameThreadPool.pause();
+        if (frameDrawer != null)
+            frameDrawer.pause();
         super.onPause();
     }
 
@@ -215,6 +223,8 @@ public class MainActivity extends AppCompatActivity implements
     protected void onDestroy() {
         if(frameThreadPool != null)
             frameThreadPool.stop();
+        if (frameDrawer != null)
+            frameDrawer.stop();
         super.onDestroy();
         if (mBackgroundHandler != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
@@ -306,36 +316,14 @@ public class MainActivity extends AppCompatActivity implements
         }
 
         String tag = Thread.currentThread().getName();
-
-        Log.i(tag,"start drawFrame on rotation:" + mCameraView.getCameraRotation());
-        float width = mCameraView.getPreview().getWidth()*1f;
-        float height = mCameraView.getPreview().getHeight()*1f;
-
-        Matrix matrix = new Matrix();
-        if (mCameraView.getCameraRotation() == 0 || mCameraView.getCameraRotation() == 180){
-            matrix.postScale(width / bmp.getWidth(), height / bmp.getHeight());
-            if (mCameraView.getCameraRotation() == 180){
-                matrix.postRotate(mCameraView.getCameraRotation());
-            }
-        } else {
-            matrix.postScale(width / bmp.getHeight(), height / bmp.getWidth());
-            matrix.postRotate(mCameraView.getCameraRotation());
+        Log.d(tag,"Draw frame start!");
+        Canvas canvas = mCameraView.getPreview().lockCanvas();
+        if (canvas != null){
+            canvas.drawBitmap(bmp, 0, 0, null);
+            drawSomethingOnCanvas(canvas);
+            mCameraView.getPreview().unlockCanvasAndPost(canvas);
         }
-        Bitmap newBmp = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), matrix, true);
-
-        Log.i(tag, "canvas["+ width + "x" + height + "] draw frame bitmap size: " +
-                bmp.getWidth() + "x" + bmp.getHeight() + " ==> " +
-                newBmp.getWidth() + "x" + newBmp.getHeight());
-
-        synchronized (drawFrameLock) {
-            Canvas canvas = mCameraView.getPreview().lockCanvas();
-            if (canvas != null){
-                canvas.drawBitmap(newBmp, 0, 0, null);
-                drawSomethingOnCanvas(canvas);
-                mCameraView.getPreview().unlockCanvasAndPost(canvas);
-            }
-        }
-        Log.i(tag,"end drawFrame");
+        Log.d(tag,"Draw frame end!");
     }
 
     private void drawSomethingOnCanvas(Canvas canvas) {
@@ -355,6 +343,18 @@ public class MainActivity extends AppCompatActivity implements
         canvas.drawTextOnPath("Hello World", path, 100, 50, paint);
     }
 
+    private class FrameDrawer extends FrameDrawerRunnable {
+
+        FrameDrawer(FrameImageQueue queue) {
+            super(queue);
+        }
+
+        @Override
+        void draw(Bitmap bitmap) {
+            drawFrame(bitmap);
+        }
+    }
+
     private class FrameProcesser extends FrameProcessRunnable {
         FrameProcesser(FrameQueue queue){
             super(queue);
@@ -372,8 +372,34 @@ public class MainActivity extends AppCompatActivity implements
             }
             byte[] tmp = os.toByteArray();
             Bitmap bmp = BitmapFactory.decodeByteArray(tmp, 0, tmp.length);
-            drawFrame(bmp);
+            if (bmp == null || bmp.isRecycled()) {
+                return;
+            }
+
+            String tag = Thread.currentThread().getName();
+
+            Log.d(tag,"rotate frame image on rotation:" + mCameraView.getCameraRotation());
+            float width = mCameraView.getPreview().getWidth()*1f;
+            float height = mCameraView.getPreview().getHeight()*1f;
+
+            Matrix matrix = new Matrix();
+            if (mCameraView.getCameraRotation() == 0 || mCameraView.getCameraRotation() == 180){
+                matrix.postScale(width / bmp.getWidth(), height / bmp.getHeight());
+                if (mCameraView.getCameraRotation() == 180){
+                    matrix.postRotate(mCameraView.getCameraRotation());
+                }
+            } else {
+                matrix.postScale(width / bmp.getHeight(), height / bmp.getWidth());
+                matrix.postRotate(mCameraView.getCameraRotation());
+            }
+            Bitmap newBmp = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), matrix, true);
+
+            Log.d(tag, "canvas["+ width + "x" + height + "] will draw frame bitmap size: " +
+                    bmp.getWidth() + "x" + bmp.getHeight() + " ==> " +
+                    newBmp.getWidth() + "x" + newBmp.getHeight());
             bmp.recycle();
+
+            frameImageQueue.add(new FrameImage(frame.millis, newBmp));
         }
     }
 

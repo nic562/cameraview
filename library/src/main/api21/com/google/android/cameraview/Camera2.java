@@ -195,7 +195,12 @@ class Camera2 extends CameraViewImpl {
                     return;
                 }
                 byte[] data = getDataFromImage(image, COLOR_FORMAT_NV21);
-                mCallback.onCameraFrame(new Frame(data, image.getWidth(), image.getHeight()));
+                mCallback.onCameraFrame(new Frame(
+                        data,
+                        image.getWidth(),
+                        image.getHeight(),
+                        System.currentTimeMillis()
+                ));
             }
         }
 

@@ -352,7 +352,13 @@ class Camera1 extends CameraViewImpl {
                     }
                     System.arraycopy(data, 0, frame, 0, data.length);
                     camera.addCallbackBuffer(buffer);
-                    mCallback.onCameraFrame(new Frame(frame, optimalCameraPreviewSize.getWidth(), optimalCameraPreviewSize.getHeight()));
+                    mCallback.onCameraFrame(
+                            new Frame(
+                                    frame,
+                                    optimalCameraPreviewSize.getWidth(),
+                                    optimalCameraPreviewSize.getHeight(),
+                                    System.currentTimeMillis()
+                            ));
                 }
             });
         }

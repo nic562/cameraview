@@ -7,9 +7,11 @@ public class Frame {
     public final byte[] data;
     public final int width;
     public final int height;
-    Frame(final byte[] d, final int w, final int h){
+    public final long millis;
+    Frame(final byte[] d, final int w, final int h, final long m){
         data = d;
         width = w;
         height = h;
+        millis = m;
     }
 }
